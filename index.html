@@ -1,0 +1,1676 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LogChecker 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: night-highway control room. A 3D fatigue terrain leads, the work-diary
+   strip sits beneath it like the paper diary page, and audit panels follow.
+   Deliberately dark-only: the 3D scene reads best on a night ground. */
+:root {
+  --ground: #070c14;
+  --panel: #0e1724;
+  --panel-2: #142133;
+  --line: #22344a;
+  --line-soft: #1a293b;
+  --fg: #e7edf5;
+  --muted: #8ea1b6;
+  --faint: #5d7189;
+  --work: #5aa2ff;
+  --work-soft: rgba(90, 162, 255, .16);
+  --rest: #31c48d;
+  --rest-soft: rgba(49, 196, 141, .14);
+  --night: #24306b;
+  --accent: #ffb020;
+  --minor: #e8d25a;
+  --substantial: #f59a3c;
+  --severe: #ef4f4f;
+  --critical: #e0368f;
+  --ok: #31c48d;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--ground); color: var(--fg); }
+body { font-family: var(--body); font-size: 15px; line-height: 1.45; margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+
+/* ---------- top bar ---------- */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--ground) 86%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.top-in { max-width: 1440px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; color: var(--fg); }
+.brand b { font-family: var(--display); font-weight: 700; font-size: 28px; letter-spacing: .01em; line-height: 1; }
+.brand b span { color: var(--accent); }
+.brand small { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.operator { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; padding: 4px 10px; border-radius: 4px; background: #b3121b; color: #fff; }
+.tabs { display: flex; gap: 4px; margin-left: auto; }
+.tab { background: none; border: 1px solid transparent; color: var(--muted); padding: 7px 14px; border-radius: 999px; cursor: pointer; font-weight: 600; letter-spacing: .02em; }
+.tab:hover { color: var(--fg); }
+.tab[aria-selected="true"] { color: var(--ground); background: var(--fg); }
+
+.wrap { max-width: 1440px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 60px; }
+.view[hidden] { display: none !important; }
+
+/* ---------- audit layout ---------- */
+.audit { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 980px) { .audit { grid-template-columns: minmax(0, 1fr); } }
+
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+h2.h { font-family: var(--display); font-weight: 600; font-size: 22px; letter-spacing: .01em; margin: 0; line-height: 1.1; text-wrap: balance; }
+
+/* driver roster */
+.roster { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 980px) { .roster { position: static; } }
+.roster-head { display: flex; justify-content: space-between; align-items: center; }
+.drivers { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 980px) { .drivers { flex-direction: row; overflow-x: auto; padding-bottom: 6px; } .driver { min-width: 230px; } }
+.driver {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 10px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r);
+  cursor: pointer; text-align: left; transition: transform .25s, border-color .2s, background .2s;
+  transform: perspective(600px) rotateY(0deg);
+}
+.driver:hover { border-color: var(--line); transform: perspective(600px) rotateY(-4deg) translateX(2px); }
+.driver[aria-pressed="true"] { border-color: var(--work); background: linear-gradient(120deg, rgba(90,162,255,.14), var(--panel) 60%); }
+.driver .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.driver .meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ring { width: 46px; height: 46px; }
+.ring text { font-family: var(--display); font-weight: 700; font-size: 15px; fill: var(--fg); }
+.flags { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: #1a1200; border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: none; }
+.btn.sm { padding: 4px 9px; font-size: 13px; }
+.btn.danger { color: var(--severe); }
+
+/* ---------- 3D stage ---------- */
+.stage-card { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line-soft); background: radial-gradient(120% 90% at 50% 0%, #0f1d33 0%, var(--ground) 70%); }
+.stage { height: clamp(400px, 46vw, 520px); width: 100%; display: block; touch-action: none; }
+.stage canvas { display: block; width: 100% !important; height: 100% !important; }
+.stage-hud { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 14px; }
+.hud-row { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.hud-title .who { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 3.4vw, 40px); line-height: 1; letter-spacing: .01em; text-shadow: 0 2px 18px rgba(0,0,0,.6); }
+.hud-title .sub { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hud-ctrl { display: flex; gap: 6px; pointer-events: auto; flex-wrap: wrap; }
+.seg { display: inline-flex; background: rgba(7,12,20,.7); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button { background: none; border: 0; padding: 4px 11px; border-radius: 999px; color: var(--muted); cursor: pointer; font-weight: 600; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--ground); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); background: rgba(7,12,20,.66); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-soft); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.tip { position: absolute; pointer-events: none; background: rgba(7,12,20,.92); border: 1px solid var(--line); padding: 6px 9px; border-radius: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; transform: translate(-50%, -130%); }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); padding: 20px; text-align: center; }
+
+/* score strip under stage */
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden; margin-top: 14px; }
+@media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--panel); padding: 12px 14px; }
+.kpi .v { font-family: var(--display); font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ---------- panels ---------- */
+.panel { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; padding: 16px; margin-top: 16px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; }
+@media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.cols > .panel { margin-top: 0; }
+.cols { margin-top: 16px; }
+
+/* ---------- diary page ---------- */
+.daybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.daynav { display: inline-flex; align-items: center; gap: 4px; }
+.daynav button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; font-size: 16px; }
+.daynav input { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; height: 34px; }
+.dayname { font-family: var(--display); font-size: 24px; font-weight: 600; }
+.field-inline { display: inline-flex; flex-direction: column; gap: 2px; }
+.field-inline label { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.field-inline input { width: 130px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.daybar .spacer { flex: 1; }
+
+.diary-scroll { overflow-x: auto; margin-top: 14px; padding-bottom: 4px; }
+.diary { min-width: 780px; display: grid; grid-template-columns: 86px minmax(0, 1fr) 92px; }
+.diary .lane-label { font-family: var(--display); font-weight: 600; letter-spacing: .08em; font-size: 14px; display: flex; align-items: center; color: var(--muted); }
+.axis { position: relative; height: 34px; }
+.axis span { position: absolute; bottom: 12px; transform: translateX(-50%); font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.axis i { position: absolute; bottom: 0; width: 1px; background: var(--faint); }
+.marks { position: relative; height: 14px; }
+.marks b { position: absolute; top: 0; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid var(--severe); transform: translateX(-50%); filter: drop-shadow(0 0 4px currentColor); }
+.lane { display: grid; grid-template-columns: repeat(96, minmax(0, 1fr)); height: 38px; border: 1px solid var(--line); position: relative; user-select: none; touch-action: none; cursor: crosshair; }
+.lane + .lane { border-top: 0; }
+.lane .c { border-right: 1px solid var(--line-soft); position: relative; }
+.lane .c:nth-child(4n) { border-right-color: var(--line); }
+.lane .c.nt { background: rgba(36, 48, 107, .28); }
+.lane.work .c.on { background: var(--work); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.lane.rest .c.on { background: var(--rest); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.lane .c.win::after { content: ""; position: absolute; inset: -1px 0; background: repeating-linear-gradient(135deg, rgba(239,79,79,.42) 0 4px, transparent 4px 8px); pointer-events: none; }
+.lane-total { display: flex; align-items: center; justify-content: flex-end; font-family: var(--display); font-weight: 700; font-size: 19px; font-variant-numeric: tabular-nums; }
+.lane-total.w { color: var(--work); } .lane-total.r { color: var(--rest); }
+.nodata { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.hint { font-size: 13px; color: var(--muted); }
+
+.week { margin-top: 16px; display: flex; flex-direction: column; gap: 3px; min-width: 780px; }
+.wrow { display: grid; grid-template-columns: 86px minmax(0, 1fr) 92px; align-items: center; cursor: pointer; border-radius: 4px; }
+.wrow:hover .wstrip { outline: 1px solid var(--muted); }
+.wrow[aria-current="true"] .wstrip { outline: 2px solid var(--accent); }
+.wrow .d { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.wstrip { height: 14px; position: relative; border-radius: 2px; overflow: visible; }
+.wstrip canvas { width: 100%; height: 100%; display: block; border-radius: 2px; }
+.wstrip .bm { position: absolute; top: -3px; width: 4px; height: 20px; border-radius: 2px; transform: translateX(-50%); }
+.wrow .t { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* totals */
+.totals { display: flex; flex-direction: column; gap: 10px; }
+.tot { background: var(--panel-2); border-radius: var(--r); padding: 12px; }
+.tot h4 { margin: 0 0 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.tot { display: grid; grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1fr); gap: 2px 14px; align-items: baseline; }
+.tot h4 { margin: 0; grid-row: span 3; }
+.tot .row { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; font-size: 14px; }
+.tot .meter, .tot .lim { grid-column: 2 / -1; }
+.meter { height: 6px; border-radius: 3px; background: var(--line-soft); margin: 8px 0 6px; overflow: hidden; position: relative; }
+.meter b { display: block; height: 100%; background: var(--work); border-radius: 3px; }
+.meter b.over { background: var(--severe); }
+.tot .lim { font-size: 12px; color: var(--muted); }
+
+/* breaches */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: none; padding: 4px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+.chip[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+.blist { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; padding-right: 2px; }
+.breach { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; gap: 12px; align-items: stretch; background: var(--panel-2); border-radius: var(--r); padding: 10px 12px 10px 0; border: 1px solid transparent; }
+.breach.sel { border-color: var(--fg); }
+.breach .stripe { border-radius: 0 3px 3px 0; }
+.breach .t1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.breach .rl { font-weight: 600; }
+.breach .t2 { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.breach .acts { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
+.pill { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; font-weight: 500; color: #120d00; }
+.sev-minor { background: var(--minor); } .sev-substantial { background: var(--substantial); } .sev-severe { background: var(--severe); color: #fff; } .sev-critical { background: var(--critical); color: #fff; }
+.c-minor { color: var(--minor); } .c-substantial { color: var(--substantial); } .c-severe { color: var(--severe); } .c-critical { color: var(--critical); }
+.ncr-tag { font-family: var(--mono); font-size: 11px; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 1px 6px; }
+.empty { padding: 26px 12px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--r); }
+.empty b { display: block; font-family: var(--display); font-size: 20px; color: var(--ok); margin-bottom: 4px; }
+
+/* NCR register */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.mono { white-space: nowrap; }
+.status { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+.overdue { color: var(--severe); font-weight: 600; }
+
+/* dialog */
+dialog { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 14px; padding: 0; width: min(560px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(3, 6, 12, .7); backdrop-filter: blur(3px); }
+.dlg { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dlg h3 { margin: 0; font-family: var(--display); font-size: 26px; font-weight: 700; }
+.ref { background: var(--panel-2); border-radius: var(--r); padding: 10px 12px; font-size: 14px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 520px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.f { display: flex; flex-direction: column; gap: 4px; }
+.f label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.f input, .f select, .f textarea { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+.f textarea { min-height: 70px; resize: vertical; }
+.dlg-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.err { color: var(--severe); font-size: 13px; min-height: 1em; }
+
+/* fleet report */
+.report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.report-head h1 { font-family: var(--display); font-weight: 700; font-size: clamp(32px, 5vw, 54px); line-height: .95; margin: 0; text-wrap: balance; }
+.report-head p { color: var(--muted); margin: 8px 0 0; max-width: 62ch; }
+.bigscore { display: flex; align-items: center; gap: 18px; }
+.sevbar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--line-soft); min-width: 120px; }
+.sevbar i { display: block; height: 100%; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); background: var(--fg); color: var(--ground); padding: 9px 16px; border-radius: 999px; font-weight: 600; opacity: 0; transition: .25s; pointer-events: none; z-index: 50; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* rule book */
+.rb { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .rb { grid-template-columns: minmax(0, 1fr); } }
+.rb .panel { margin-top: 0; }
+.prose { max-width: 70ch; color: var(--muted); }
+.prose b { color: var(--fg); }
+.foot { margin-top: 30px; font-size: 12px; color: var(--faint); max-width: 90ch; }
+
+@media (max-width: 640px) {
+  .hud-hint { display: none; }
+  .legend { gap: 8px; font-size: 11px; }
+  .tab { padding: 6px 10px; font-size: 14px; }
+  .tabs { margin-left: 0; width: 100%; justify-content: space-between; }
+  .brand small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#audit"><b>Log<span>Checker</span></b><small>3D · NHVR fatigue audit</small></a>
+    <span class="operator">Apex Transport and Distribution</span>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" id="tab-audit" data-view="audit" aria-selected="true">Driver audit</button>
+      <button class="tab" role="tab" id="tab-report" data-view="report" aria-selected="false">Compliance report</button>
+      <button class="tab" role="tab" id="tab-rules" data-view="rules" aria-selected="false">Rule book</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ================= AUDIT ================= -->
+  <section class="view" id="view-audit">
+    <div class="audit">
+      <aside class="roster">
+        <div class="roster-head">
+          <p class="eyebrow" style="margin:0">Drivers · last 14 days</p>
+          <button class="btn sm ghost" id="addDriverBtn">+ Add driver</button>
+        </div>
+        <div class="drivers" id="drivers"></div>
+        <p class="hint">Example fleet loaded. Records you edit are saved in this browser.</p>
+        <button class="btn sm ghost danger" id="resetBtn" style="align-self:flex-start">Reset example data</button>
+      </aside>
+
+      <div style="min-width:0">
+        <div class="stage-card">
+          <div class="stage" id="stage"></div>
+          <div class="stage-hud">
+            <div class="hud-row">
+              <div class="hud-title">
+                <div class="who" id="hudName">—</div>
+                <div class="sub" id="hudSub"></div>
+              </div>
+              <div class="hud-ctrl">
+                <div class="seg" role="group" aria-label="Days shown">
+                  <button id="span7" aria-pressed="false">7 days</button>
+                  <button id="span14" aria-pressed="true">14 days</button>
+                </div>
+                <div class="seg"><button id="spinBtn" aria-pressed="true">Orbit</button></div>
+              </div>
+            </div>
+            <div class="hud-row" style="align-items:flex-end">
+              <div class="legend">
+                <span><i style="background:var(--work)"></i>Work</span>
+                <span><i style="background:var(--rest)"></i>Rest</span>
+                <span><i style="background:var(--night)"></i>Night window 10pm–8am</span>
+                <span><i style="background:var(--critical)"></i>Breach beacon</span>
+              </div>
+              <span class="hint hud-hint" style="background:rgba(7,12,20,.66);padding:4px 8px;border-radius:6px">Drag to orbit · scroll to zoom · click a day</span>
+            </div>
+          </div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <!-- diary page -->
+        <section class="panel" aria-labelledby="diaryTitle">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Work diary page</p>
+              <div class="daybar">
+                <div class="daynav">
+                  <button id="prevDay" aria-label="Previous day">‹</button>
+                  <input type="date" id="dayPick" aria-label="Diary date">
+                  <button id="nextDay" aria-label="Next day">›</button>
+                </div>
+                <h2 class="dayname" id="diaryTitle">—</h2>
+              </div>
+            </div>
+            <div class="daybar">
+              <div class="field-inline"><label for="diaryNo">Diary no.</label><input id="diaryNo" placeholder="WD 000 000"></div>
+              <div class="field-inline"><label for="pageNo">Page</label><input id="pageNo" style="width:70px" placeholder="—"></div>
+            </div>
+          </div>
+
+          <div class="diary-scroll">
+            <div class="diary" id="diary">
+              <div></div><div class="axis" id="axis"></div><div></div>
+              <div></div><div class="marks" id="marks"></div><div></div>
+              <div class="lane-label">WORK</div><div class="lane work" id="laneWork"></div><div class="lane-total w" id="totWork">0h 00m</div>
+              <div class="lane-label">REST</div><div class="lane rest" id="laneRest"></div><div class="lane-total r" id="totRest">24h 00m</div>
+            </div>
+            <div class="week" id="week"></div>
+          </div>
+          <div class="daybar" style="margin-top:12px">
+            <span class="hint">Click or drag in the WORK lane to record work, in the REST lane to record rest. Each cell is 15 minutes.</span>
+            <span class="spacer"></span>
+            <button class="btn sm" id="copyPrev">Copy previous day</button>
+            <button class="btn sm ghost danger" id="clearDay">Clear this page</button>
+          </div>
+          <p class="nodata" id="nodata" hidden>No record for this day yet. Paint the lanes to start one.</p>
+        </section>
+
+        <div class="cols">
+          <section class="panel" aria-labelledby="totTitle">
+            <div class="panel-head"><div><p class="eyebrow">Totals at end of day</p><h2 class="h" id="totTitle">Work and rest</h2></div></div>
+            <div class="totals" id="totals"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="brTitle">
+            <div class="panel-head">
+              <div><p class="eyebrow">Breach information</p><h2 class="h" id="brTitle">Breaches</h2></div>
+              <div class="filters" role="group" aria-label="Breach range">
+                <button class="chip" data-range="1" aria-pressed="false">This day</button>
+                <button class="chip" data-range="7" aria-pressed="false">7 days</button>
+                <button class="chip" data-range="14" aria-pressed="true">14 days</button>
+                <button class="chip" data-range="all" aria-pressed="false">All records</button>
+              </div>
+            </div>
+            <div class="blist" id="blist"></div>
+          </section>
+        </div>
+
+        <section class="panel" aria-labelledby="ncrTitle">
+          <div class="panel-head">
+            <div><p class="eyebrow">Non-conformance reports</p><h2 class="h" id="ncrTitle">NCR register</h2></div>
+            <div class="filters" role="group" aria-label="NCR scope">
+              <button class="chip" data-ncr="driver" aria-pressed="true">This driver</button>
+              <button class="chip" data-ncr="all" aria-pressed="false">Whole fleet</button>
+            </div>
+          </div>
+          <div class="table-scroll"><table id="ncrTable"></table></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REPORT ================= -->
+  <section class="view" id="view-report" hidden>
+    <div class="report-head">
+      <div>
+        <p class="eyebrow" id="repPeriod">Reporting period</p>
+        <h1>Fleet fatigue compliance</h1>
+        <p>Breaches found in the 14 days to the latest record for each driver, counted against the rule set each driver works under, with the NCR raised for each.</p>
+      </div>
+      <button class="btn primary" id="copyReport">Copy report text</button>
+    </div>
+    <div class="kpis" id="repKpis"></div>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">By driver</p><h2 class="h">Breach summary</h2></div></div>
+      <div class="table-scroll"><table id="repTable"></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Corrective action</p><h2 class="h">NCR status</h2></div></div>
+      <div class="table-scroll"><table id="repNcr"></table></div>
+    </section>
+  </section>
+
+  <!-- ================= RULES ================= -->
+  <section class="view" id="view-rules" hidden>
+    <div class="report-head" style="margin-bottom:16px">
+      <div>
+        <p class="eyebrow">Heavy Vehicle National Law · Fatigue Management National Regulation</p>
+        <h1>Rule book</h1>
+        <p>The limits LogChecker audits against, and how it counts time.</p>
+      </div>
+    </div>
+    <div class="rb" id="rulebook"></div>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Method</p><h2 class="h">How time is counted</h2></div></div>
+      <div class="prose">
+        <p>Work and rest are recorded in <b>15-minute blocks</b>, the same unit as the national work diary.</p>
+        <p>Periods shorter than 24 hours are counted forward from the <b>end of every rest break</b>. Periods of 24 hours or more are counted forward from the end of a <b>relevant major rest break</b> of 7 continuous hours, and from the first record.</p>
+        <p>A <b>night rest break</b> is 7 continuous hours of stationary rest between 10pm and 8am, or a 24-hour continuous rest break.</p>
+        <p>When overlapping periods report the same event, LogChecker keeps one breach per event, at the time the limit was first passed and at the largest amount over.</p>
+        <p>Days with no record count as rest. Breach risk categories follow the HVNL minor, substantial, severe and critical bands. The night rest categories are LogChecker's own banding.</p>
+      </div>
+    </section>
+    <p class="foot">LogChecker is an audit aid. Confirm every finding against the driver's work diary and the current Heavy Vehicle National Law and Heavy Vehicle (Fatigue Management) National Regulation before taking action. Advanced Fatigue Management (AFM) accreditations have operator-specific limits and are not audited here.</p>
+  </section>
+</main>
+
+<dialog id="ncrDlg">
+  <form class="dlg" id="ncrForm" method="dialog">
+    <div><p class="eyebrow" id="ncrNo">NCR</p><h3>Raise non-conformance</h3></div>
+    <div class="ref" id="ncrRef"></div>
+    <div class="grid2">
+      <div class="f"><label for="ncrShort">Short-term action *</label>
+        <select id="ncrShort" required>
+          <option value="">Select…</option>
+          <option>Driver interviewed and counselled</option>
+          <option>Driver stood down for required rest</option>
+          <option>Written warning issued</option>
+          <option>Work diary completion retraining</option>
+          <option>Next shift rescheduled</option>
+        </select></div>
+      <div class="f"><label for="ncrLong">Long-term action</label>
+        <select id="ncrLong">
+          <option value="">Select…</option>
+          <option>Fatigue management refresher training</option>
+          <option>Review rostering and scheduling</option>
+          <option>Review customer delivery windows</option>
+          <option>Move driver to electronic work diary</option>
+          <option>Disciplinary process under company policy</option>
+        </select></div>
+      <div class="f"><label for="ncrDue">Due date *</label><input type="date" id="ncrDue" required></div>
+      <div class="f"><label for="ncrOwner">Assigned to *</label><input id="ncrOwner" placeholder="e.g. Transport Manager" required></div>
+    </div>
+    <div class="f"><label for="ncrNotes">Notes</label><textarea id="ncrNotes" placeholder="What the driver said, root cause, evidence sighted"></textarea></div>
+    <div class="err" id="ncrErr"></div>
+    <div class="dlg-acts">
+      <button type="button" class="btn ghost" id="ncrCancel">Cancel</button>
+      <button type="submit" class="btn primary">Raise NCR</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="drvDlg">
+  <form class="dlg" id="drvForm" method="dialog">
+    <h3>Add driver</h3>
+    <div class="grid2">
+      <div class="f"><label for="drvName">Full name *</label><input id="drvName" required></div>
+      <div class="f"><label for="drvLic">Licence no.</label><input id="drvLic"></div>
+      <div class="f"><label for="drvRego">Vehicle rego</label><input id="drvRego"></div>
+      <div class="f"><label for="drvRule">Rule set</label>
+        <select id="drvRule"><option value="standard">Standard Hours · solo</option><option value="bfm">BFM · solo</option></select></div>
+    </div>
+    <div class="err" id="drvErr"></div>
+    <div class="dlg-acts">
+      <button type="button" class="btn ghost" id="drvCancel">Cancel</button>
+      <button type="submit" class="btn primary">Add driver</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* LogChecker fatigue engine
+ * Evaluates work/rest records against NHVR rule sets under the Heavy Vehicle
+ * National Law (HVNL) and the Heavy Vehicle (Fatigue Management) National Regulation.
+ *
+ * Time is held as 15-minute slots (96 per day), the unit work diaries are kept in.
+ * A slot value of 1 is work time, 0 is rest time.
+ */
+(function (root) {
+  'use strict';
+
+  const SPD = 96;          // slots per day
+  const SLOT_MIN = 15;     // minutes per slot
+  const H = 4;             // slots per hour
+
+  // Breach risk categories. Thresholds are minutes over the limit (work) or
+  // minutes short of the requirement (rest): [minor, substantial, severe].
+  // Anything beyond the third number is critical.
+  const CAT_SHORT = [15, 30, 45];
+  const CAT_11H = [45, 60, 75];
+  const CAT_24H = [45, 75, 90];
+  const CAT_MULTI = [90, 150, 180];
+  const CAT_REST = [45, 75, 90];
+
+  const RULESETS = {
+    standard: {
+      id: 'standard',
+      name: 'Standard Hours',
+      sub: 'Solo driver',
+      rules: [
+        { id: 'w5h', label: '5½ hours', len: 5.5 * H, maxWork: 5.25 * H, cat: CAT_SHORT,
+          text: 'Max 5¼ h work · min 15 min continuous rest' },
+        { id: 'w8h', label: '8 hours', len: 8 * H, maxWork: 7.5 * H, cat: CAT_SHORT,
+          text: 'Max 7½ h work · min 30 min rest in 15 min blocks' },
+        { id: 'w11h', label: '11 hours', len: 11 * H, maxWork: 10 * H, cat: CAT_11H,
+          text: 'Max 10 h work · min 60 min rest in 15 min blocks' },
+        { id: 'w24h', label: '24 hours', len: 24 * H, maxWork: 12 * H, cat: CAT_24H,
+          minRest: 7 * H, restCat: CAT_REST,
+          text: 'Max 12 h work · min 7 continuous hours stationary rest' },
+        { id: 'w7d', label: '7 days', len: 7 * SPD, maxWork: 72 * H, cat: CAT_MULTI,
+          minRest: 24 * H, restCat: CAT_REST,
+          text: 'Max 72 h work · min 24 continuous hours stationary rest' },
+        { id: 'w14d', label: '14 days', len: 14 * SPD, maxWork: 144 * H, cat: CAT_MULTI,
+          nightMin: 2, nightConsecutive: 2,
+          text: 'Max 144 h work · min 2 night rest breaks, 2 on consecutive days' }
+      ]
+    },
+    bfm: {
+      id: 'bfm',
+      name: 'BFM',
+      sub: 'Basic Fatigue Management · solo',
+      rules: [
+        { id: 'b6h', label: '6¼ hours', len: 6.25 * H, maxWork: 6 * H, cat: CAT_SHORT,
+          text: 'Max 6 h work · min 15 min continuous rest' },
+        { id: 'b9h', label: '9 hours', len: 9 * H, maxWork: 8.5 * H, cat: CAT_SHORT,
+          text: 'Max 8½ h work · min 30 min rest in 15 min blocks' },
+        { id: 'b12h', label: '12 hours', len: 12 * H, maxWork: 11 * H, cat: CAT_11H,
+          text: 'Max 11 h work · min 60 min rest in 15 min blocks' },
+        { id: 'b24h', label: '24 hours', len: 24 * H, maxWork: 14 * H, cat: CAT_24H,
+          minRest: 7 * H, restCat: CAT_REST,
+          text: 'Max 14 h work · min 7 continuous hours stationary rest' },
+        { id: 'b14d', label: '14 days', len: 14 * SPD, maxWork: 144 * H, cat: CAT_MULTI,
+          nightMin: 4, nightConsecutive: 2,
+          text: 'Max 144 h work · min 4 night rest breaks, 2 on consecutive days' },
+        { id: 'b84', label: '84 h before 24 h rest', len: 0, cumulative: 84 * H, cat: CAT_MULTI,
+          text: 'Max 84 h work · min 24 continuous hours stationary rest before more work' }
+      ]
+    }
+  };
+
+  const SEVERITY = ['minor', 'substantial', 'severe', 'critical'];
+
+  function categorise(minutes, t) {
+    if (minutes <= t[0]) return 'minor';
+    if (minutes <= t[1]) return 'substantial';
+    if (minutes <= t[2]) return 'severe';
+    return 'critical';
+  }
+
+  // ---- date helpers (ISO yyyy-mm-dd, UTC arithmetic so time zones never shift a day)
+  function isoAdd(iso, n) {
+    const d = new Date(iso + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function isoDiff(a, b) {
+    return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+  }
+
+  /** Flatten a driver's day records into one contiguous slot timeline. */
+  function buildTimeline(days) {
+    const keys = Object.keys(days).filter(k => days[k] && days[k].length === SPD).sort();
+    if (!keys.length) return null;
+    const start = keys[0];
+    const nDays = isoDiff(start, keys[keys.length - 1]) + 1;
+    const N = nDays * SPD;
+    const slots = new Uint8Array(N);
+    const known = new Uint8Array(nDays);
+    for (const k of keys) {
+      const d = isoDiff(start, k);
+      known[d] = 1;
+      const s = days[k];
+      for (let i = 0; i < SPD; i++) slots[d * SPD + i] = s.charCodeAt(i) === 49 ? 1 : 0;
+    }
+    return { start, nDays, N, slots, known };
+  }
+
+  function prefixSums(slots) {
+    const P = new Int32Array(slots.length + 1);
+    for (let i = 0; i < slots.length; i++) P[i + 1] = P[i] + slots[i];
+    return P;
+  }
+
+  function restRuns(slots) {
+    const runs = [];
+    let s = -1;
+    for (let i = 0; i <= slots.length; i++) {
+      const rest = i < slots.length && slots[i] === 0;
+      if (rest && s < 0) s = i;
+      if (!rest && s >= 0) { runs.push([s, i]); s = -1; }
+    }
+    return runs;
+  }
+
+  function longestRestIn(runs, a, b) {
+    let best = 0;
+    for (const [s, e] of runs) {
+      if (e <= a) continue;
+      if (s >= b) break;
+      const len = Math.min(e, b) - Math.max(s, a);
+      if (len > best) best = len;
+    }
+    return best;
+  }
+
+  /** Night rest break: 7 continuous hours stationary rest between 10pm and 8am, or 24 continuous hours rest. */
+  function nightRests(tl, runs) {
+    const nights = [];
+    for (let n = 0; n < tl.nDays; n++) {
+      const a = n * SPD + 22 * H, b = a + 10 * H;
+      if (b > tl.N) { nights.push(null); continue; }
+      let ok = false;
+      for (const [s, e] of runs) {
+        if (e <= a || s >= b) continue;
+        if (Math.min(e, b) - Math.max(s, a) >= 7 * H || e - s >= 24 * H) { ok = true; break; }
+      }
+      nights.push(ok);
+    }
+    return nights;
+  }
+
+  /**
+   * Evaluate a timeline. Time is counted forward from the end of each rest break
+   * (and from the first record), which is how the HVNL counts "any period".
+   */
+  function evaluate(days, rulesetId) {
+    const rs = RULESETS[rulesetId] || RULESETS.standard;
+    const tl = buildTimeline(days);
+    if (!tl) return { timeline: null, breaches: [], nights: [] };
+    const { slots, N } = tl;
+    const P = prefixSums(slots);
+    const runs = restRuns(slots);
+    const nights = nightRests(tl, runs);
+
+    // Short periods count from the end of any rest break; periods of 24 hours or
+    // more count from the end of a relevant major rest break (7 continuous hours).
+    const starts = [], majorStarts = [];
+    for (let i = 0; i < N; i++) if (slots[i] === 1 && (i === 0 || slots[i - 1] === 0)) starts.push(i);
+    const firstWork = starts.length ? starts[0] : 0;
+    majorStarts.push(firstWork);
+    for (const [s, e] of runs) if (e - s >= 7 * H && e < N && e > firstWork) majorStarts.push(e);
+
+    const raw = [];
+    for (const rule of rs.rules) {
+      if (rule.cumulative) { raw.push(...cumulativeCheck(rule, slots, runs)); continue; }
+      for (const s of (rule.len >= SPD ? majorStarts : starts)) {
+        const full = s + rule.len <= N;
+        const e = Math.min(s + rule.len, N);
+        const work = P[e] - P[s];
+        if (work > rule.maxWork) {
+          let t = s;
+          while (t < e && P[t + 1] - P[s] <= rule.maxWork) t++;
+          const over = (work - rule.maxWork) * SLOT_MIN;
+          raw.push({ rule, kind: 'work', ws: s, we: e, at: t, value: work * SLOT_MIN,
+            limit: rule.maxWork * SLOT_MIN, amount: over, severity: categorise(over, rule.cat) });
+        }
+        if (rule.minRest && full) {
+          const longest = longestRestIn(runs, s, e);
+          if (longest < rule.minRest) {
+            const short = (rule.minRest - longest) * SLOT_MIN;
+            raw.push({ rule, kind: 'rest', ws: s, we: e, at: e - 1, value: longest * SLOT_MIN,
+              limit: rule.minRest * SLOT_MIN, amount: short, severity: categorise(short, rule.restCat) });
+          }
+        }
+        if (rule.nightMin && full) {
+          const inside = [];
+          for (let n = 0; n < nights.length; n++) {
+            const a = n * SPD + 22 * H;
+            if (a >= s && a + 10 * H <= e) inside.push(nights[n]);
+          }
+          const count = inside.filter(Boolean).length;
+          let pair = false;
+          for (let k = 1; k < inside.length; k++) if (inside[k] && inside[k - 1]) pair = true;
+          if (count < rule.nightMin || !pair) {
+            const missing = Math.max(0, rule.nightMin - count);
+            const severity = count === 0 ? 'critical' : missing >= 2 ? 'severe' : missing === 1 ? 'substantial' : 'minor';
+            raw.push({ rule, kind: 'night', ws: s, we: e, at: e - 1, value: count, limit: rule.nightMin,
+              amount: missing, pair, severity });
+          }
+        }
+      }
+    }
+    return { timeline: tl, breaches: cluster(raw, tl), nights };
+  }
+
+  function cumulativeCheck(rule, slots, runs) {
+    const out = [];
+    let work = 0, from = 0, flagged = null;
+    let r = 0;
+    for (let i = 0; i < slots.length; i++) {
+      while (r < runs.length && runs[r][1] <= i) r++;
+      if (slots[i] === 0) {
+        const run = runs[r];
+        if (run && run[0] === i && run[1] - run[0] >= 24 * H) { work = 0; from = run[1]; flagged = null; }
+        continue;
+      }
+      work++;
+      if (work > rule.cumulative) {
+        const over = (work - rule.cumulative) * SLOT_MIN;
+        if (!flagged) {
+          flagged = { rule, kind: 'work', ws: from, we: i + 1, at: i, value: work * SLOT_MIN,
+            limit: rule.cumulative * SLOT_MIN, amount: over, severity: categorise(over, rule.cat) };
+          out.push(flagged);
+        } else {
+          flagged.we = i + 1; flagged.value = work * SLOT_MIN; flagged.amount = over;
+          flagged.severity = categorise(over, rule.cat);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Overlapping windows report the same event many times; keep one breach per event. */
+  function cluster(raw, tl) {
+    raw.sort((a, b) => a.at - b.at);
+    const groups = [];
+    for (const b of raw) {
+      const key = b.rule.id + ':' + b.kind;
+      const gap = Math.max(b.rule.len, 24 * H) / 2;
+      const g = groups.find(x => x.key === key && b.at - x.first < gap);
+      if (!g) { groups.push({ key, first: b.at, best: b }); continue; }
+      if (b.amount > g.best.amount) g.best = Object.assign({}, b, { at: g.best.at });
+    }
+    return groups.map(g => {
+      const b = g.best;
+      const dayIdx = Math.floor(b.at / SPD);
+      return Object.assign({}, b, {
+        ruleId: b.rule.id,
+        date: isoAdd(tl.start, dayIdx),
+        slot: b.at % SPD,
+        wsDate: isoAdd(tl.start, Math.floor(b.ws / SPD)), wsSlot: b.ws % SPD,
+        weDate: isoAdd(tl.start, Math.floor((b.we - 1) / SPD)), weSlot: (b.we - 1) % SPD,
+        key: b.rule.id + '|' + b.kind + '|' + isoAdd(tl.start, dayIdx) + '|' + (b.at % SPD)
+      });
+    }).sort((a, b) => (a.date + pad(a.slot)).localeCompare(b.date + pad(b.slot)));
+  }
+
+  function pad(n) { return String(n).padStart(3, '0'); }
+
+  /** Work totals over the 1, 7 and 14 days that end at the close of `iso`. */
+  function totals(days, iso) {
+    const out = {};
+    for (const n of [1, 7, 14]) {
+      let work = 0, rec = 0;
+      for (let k = 0; k < n; k++) {
+        const s = days[isoAdd(iso, -k)];
+        if (!s) continue;
+        rec++;
+        for (let i = 0; i < SPD; i++) if (s.charCodeAt(i) === 49) work++;
+      }
+      out[n] = { work: work * SLOT_MIN, rest: (rec * SPD - work) * SLOT_MIN, days: rec };
+    }
+    return out;
+  }
+
+  const api = { SPD, SLOT_MIN, H, RULESETS, SEVERITY, evaluate, totals, isoAdd, isoDiff, categorise };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Fatigue = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Example fleet used on first load. These are illustrative records, not real drivers. */
+(function (root) {
+  'use strict';
+  const SPD = 96;
+  const START = '2026-09-14'; // a Monday
+  const DAYS = 21;
+
+  function toSlot(hhmm) { const [h, m] = hhmm.split(':').map(Number); return h * 4 + Math.round(m / 15); }
+
+  // blocks alternate work, rest, work, rest... in minutes, starting at `at` on `day`
+  function build(plan) {
+    const a = new Uint8Array(DAYS * SPD);
+    for (const [day, at, blocks] of plan) {
+      let i = day * SPD + toSlot(at);
+      blocks.forEach((min, k) => {
+        const n = Math.round(min / 15);
+        if (k % 2 === 0) for (let j = 0; j < n && i + j < a.length; j++) a[i + j] = 1;
+        i += n;
+      });
+    }
+    const days = {};
+    for (let d = 0; d < DAYS; d++) {
+      let s = '';
+      for (let i = 0; i < SPD; i++) s += a[d * SPD + i];
+      const dt = new Date(START + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() + d);
+      days[dt.toISOString().slice(0, 10)] = s;
+    }
+    return days;
+  }
+
+  const weekday = d => d % 7 < 5;
+  const range = (n, f) => Array.from({ length: n }, (_, d) => d).filter(f);
+  const NORMAL = [240, 30, 210, 30, 210];          // 11h work, 5:00 to 17:00
+
+  function diaries(base, firstPage) {
+    const out = {};
+    for (let d = 0; d < DAYS; d++) {
+      const dt = new Date(START + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() + d);
+      out[dt.toISOString().slice(0, 10)] = { no: base, page: String(firstPage + d) };
+    }
+    return out;
+  }
+
+  const drivers = [
+    {
+      id: 'd1', name: "Liam O'Connor", licence: 'NSW 1849 3021', rego: 'XQ 47 LM', base: 'Wetherill Park NSW',
+      ruleset: 'standard', diary: diaries('WD 448 210', 12),
+      days: build(range(DAYS, weekday).map(d => [d, '05:00', NORMAL]))
+    },
+    {
+      id: 'd2', name: 'Priya Sharma', licence: 'VIC 0921 7740', rego: 'BFM 220', base: 'Laverton North VIC',
+      ruleset: 'bfm', diary: diaries('WD 512 007', 40),
+      days: build(range(DAYS, weekday).map(d => [d, '04:00', d === 9 ? [330, 30, 300, 30, 240] : [300, 30, 300, 30, 180]]))
+    },
+    {
+      id: 'd3', name: 'Daniel Nguyen', licence: 'QLD 6602 1185', rego: 'XV 19 DN', base: 'Larapinta QLD',
+      ruleset: 'standard', diary: diaries('WD 377 954', 3),
+      days: build([
+        ...range(7, d => d < 6).map(d => {
+          if (d === 1) return [d, '06:00', [330, 30, 270, 30, 60]];
+          if (d === 3) return [d, '04:00', [300, 30, 300, 30, 210]];
+          if (d === 4) return [d, '00:30', [300, 30, 300]];
+          return [d, '06:00', [300, 30, 300, 30, 60]];
+        }),
+        ...range(DAYS, d => d >= 7 && d < 14).map(d => [d, '06:00', [300, 30, 300, 30, 60]]),
+        ...range(DAYS, d => d >= 14 && weekday(d)).map(d => [d, '06:00', [300, 30, 270, 30, 90]])
+      ])
+    },
+    {
+      id: 'd4', name: 'Sarah Mitchell', licence: 'NSW 7713 0456', rego: 'XN 82 SM', base: 'Chullora NSW',
+      ruleset: 'standard', diary: diaries('WD 601 338', 71),
+      days: build([
+        ...range(DAYS, d => d % 7 < 4).map(d => [d, '20:00', [240, 30, 240, 30, 180]]),
+        [11, '14:30', [120]]
+      ])
+    },
+    {
+      id: 'd5', name: 'Jack Thompson', licence: 'SA 2280 9917', rego: 'SB 61 JT', base: 'Wingfield SA',
+      ruleset: 'standard', diary: diaries('WD 290 115', 55),
+      days: build(range(DAYS, weekday).map(d => [d, '06:00', d === 16 ? [270, 15, 225, 30, 120] : [240, 30, 240, 30, 180]]))
+    }
+  ];
+
+  const api = { drivers, START, DAYS, lastDay: '2026-10-04' };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.SampleFleet = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* 3D fatigue terrain: one row per day, one column per 15-minute block.
+   Work blocks rise as towers, rest lies flat, breaches stand as pulsing beacons. */
+(function (root) {
+  'use strict';
+  if (!root.THREE) return;
+  const SPD = 96;
+  const COL_W = 0.5, ROW_D = 2.1;
+  const WORK_H = 2.4, REST_H = 0.16, NONE_H = 0.04;
+  const C = {
+    work: new THREE.Color('#5aa2ff'), rest: new THREE.Color('#31c48d'), none: new THREE.Color('#1c2a3c'),
+    minor: '#e8d25a', substantial: '#f59a3c', severe: '#ef4f4f', critical: '#e0368f'
+  };
+  const reduce = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function Stage(el, tipEl, onPick) {
+    this.el = el; this.tip = tipEl; this.onPick = onPick;
+    this.rows = 14; this.days = []; this.targets = new Float32Array(14 * SPD); this.t0 = 0;
+    this.beacons = []; this.labels = [];
+    try { this.renderer = new THREE.WebGLRenderer({ antialias: true }); }
+    catch (e) { el.innerHTML = '<div class="nogl">3D view needs WebGL, which this browser has turned off. The diary and breach tools below still work.</div>'; this.dead = true; return; }
+    const r = this.renderer;
+    r.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
+    r.outputEncoding = THREE.sRGBEncoding;
+    el.appendChild(r.domElement);
+
+    const scene = this.scene = new THREE.Scene();
+    scene.background = new THREE.Color('#070c14');
+    scene.fog = new THREE.Fog('#070c14', 55, 125);
+
+    const cam = this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
+    cam.position.set(-6, 30, 44);
+    const ctl = this.controls = new THREE.OrbitControls(cam, r.domElement);
+    ctl.enableDamping = true; ctl.dampingFactor = 0.08;
+    ctl.autoRotate = !reduce; ctl.autoRotateSpeed = 0.45;
+    ctl.minDistance = 14; ctl.maxDistance = 100; ctl.maxPolarAngle = 1.42;
+    ctl.target.set(0, 0, 0);
+    this.focus = null;
+
+    scene.add(new THREE.HemisphereLight('#a9c8ff', '#0a1220', 0.75));
+    const sun = new THREE.DirectionalLight('#ffffff', 0.95); sun.position.set(-18, 40, 26); scene.add(sun);
+    const rim = new THREE.DirectionalLight('#5aa2ff', 0.35); rim.position.set(30, 10, -30); scene.add(rim);
+
+    // ground + grid
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: '#081120', roughness: 1, metalness: 0 }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; scene.add(ground);
+    const grid = new THREE.GridHelper(160, 80, '#16263b', '#0f1b2b'); grid.position.y = -0.01; scene.add(grid);
+
+    // night bands (rebuilt per row count)
+    this.nightGroup = new THREE.Group(); scene.add(this.nightGroup);
+    this.labelGroup = new THREE.Group(); scene.add(this.labelGroup);
+    this.beaconGroup = new THREE.Group(); scene.add(this.beaconGroup);
+
+    // instanced blocks
+    const geo = new THREE.BoxGeometry(COL_W * 0.84, 1, ROW_D * 0.72); geo.translate(0, 0.5, 0);
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, metalness: 0.15 });
+    this.mesh = new THREE.InstancedMesh(geo, mat, 14 * SPD);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < 14 * SPD; i++) this.mesh.setColorAt(i, C.none);
+    scene.add(this.mesh);
+    this.dummy = new THREE.Object3D();
+    this.heights = new Float32Array(14 * SPD);
+
+    // drifting dust
+    const n = 500, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - .5) * 110; pos[i * 3 + 1] = Math.random() * 30 + 1; pos[i * 3 + 2] = (Math.random() - .5) * 80; }
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: '#7fb2ff', size: 0.16, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    scene.add(this.dust);
+
+    this.glowTex = glowTexture();
+    this.ray = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
+    this.bindPointer();
+    new ResizeObserver(() => this.resize()).observe(el);
+    this.resize();
+    this.clock = new THREE.Clock();
+    const loop = () => { this.frame(); this.raf = requestAnimationFrame(loop); };
+    loop();
+  }
+
+  function glowTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.25, 'rgba(255,255,255,.55)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function textSprite(text, color, size) {
+    const c = document.createElement('canvas'); const g = c.getContext('2d');
+    const fs = 64; g.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    const w = Math.ceil(g.measureText(text).width) + 16; c.width = w; c.height = fs + 16;
+    g.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    g.fillStyle = color; g.textBaseline = 'middle'; g.fillText(text, 8, c.height / 2);
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    s.scale.set(size * w / c.height, size, 1);
+    return s;
+  }
+
+  const P = Stage.prototype;
+  P.x = function (slot) { return (slot - (SPD - 1) / 2) * COL_W; };
+  P.z = function (row) { return (row - (this.rows - 1) / 2) * ROW_D; };
+
+  P.resize = function () {
+    if (this.dead) return;
+    const w = this.el.clientWidth, h = this.el.clientHeight;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    // keep the whole terrain in frame on narrow screens
+    this.camera.fov = w < 600 ? 58 : 40;
+    this.camera.updateProjectionMatrix();
+  };
+
+  /** days: [{iso, label, str}] oldest first; breaches: [{iso, slot, severity}] */
+  P.setData = function (days, breaches, selectedIso, animate) {
+    if (this.dead) return;
+    this.rows = days.length; this.days = days;
+    const total = 14 * SPD;
+    for (let i = 0; i < total; i++) {
+      const r = Math.floor(i / SPD), s = i % SPD, d = days[r];
+      let h = 0, col = C.none;
+      if (d) {
+        const v = d.str ? d.str[s] : null;
+        h = v === '1' ? WORK_H : v === '0' ? REST_H : NONE_H;
+        col = v === '1' ? C.work : v === '0' ? C.rest : C.none;
+        if (d.iso === selectedIso) col = col.clone().lerp(new THREE.Color('#ffffff'), v === '1' ? 0.35 : 0.25);
+        else if (selectedIso) col = col.clone().multiplyScalar(0.62);
+      }
+      this.targets[i] = h;
+      this.mesh.setColorAt(i, col);
+    }
+    this.mesh.instanceColor.needsUpdate = true;
+    this.mesh.count = days.length * SPD;
+    if (animate && !reduce) { this.heights.fill(0); this.t0 = performance.now(); this.animating = true; }
+    else { this.heights.set(this.targets); this.animating = false; this.writeMatrices(); }
+
+    this.buildNight(); this.buildLabels(); this.buildBeacons(breaches);
+  };
+
+  P.writeMatrices = function () {
+    const d = this.dummy;
+    for (let i = 0; i < this.rows * SPD; i++) {
+      const r = Math.floor(i / SPD), s = i % SPD;
+      d.position.set(this.x(s), 0, this.z(r));
+      d.scale.set(1, Math.max(0.001, this.heights[i]), 1);
+      d.updateMatrix();
+      this.mesh.setMatrixAt(i, d.matrix);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  };
+
+  P.clear = function (g) { while (g.children.length) { const o = g.children.pop(); o.geometry && o.geometry.dispose(); if (o.material) { o.material.map && o.material.map.dispose(); o.material.dispose(); } } };
+
+  P.buildNight = function () {
+    this.clear(this.nightGroup);
+    const mat = new THREE.MeshBasicMaterial({ color: '#2a3a8a', transparent: true, opacity: 0.32, depthWrite: false });
+    const depth = this.rows * ROW_D;
+    // 00:00 to 08:00 and 22:00 to 24:00 bands run the full depth
+    [[0, 32], [88, 96]].forEach(([a, b]) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry((b - a) * COL_W, depth), mat);
+      m.rotation.x = -Math.PI / 2; m.position.set((this.x(a) + this.x(b - 1)) / 2, 0.005, 0);
+      this.nightGroup.add(m);
+    });
+  };
+
+  P.buildLabels = function () {
+    this.clear(this.labelGroup);
+    this.days.forEach((d, r) => {
+      const s = textSprite(d.label, d.iso === this.selected ? '#ffb020' : '#8ea1b6', 0.95);
+      s.position.set(this.x(0) - 3.4, 0.6, this.z(r)); this.labelGroup.add(s);
+    });
+    const front = this.z(this.rows - 1) + ROW_D * 0.9;
+    [['Midnight', 0], ['6am', 24], ['Noon', 48], ['6pm', 72], ['Midnight', 96]].forEach(([t, s]) => {
+      const sp = textSprite(t, '#5d7189', 0.85); sp.position.set(this.x(s) - COL_W / 2, 0.5, front); this.labelGroup.add(sp);
+    });
+  };
+
+  P.buildBeacons = function (breaches) {
+    this.clear(this.beaconGroup); this.beacons = [];
+    const idx = {}; this.days.forEach((d, r) => { idx[d.iso] = r; });
+    breaches.forEach((b, k) => {
+      const r = idx[b.iso]; if (r === undefined) return;
+      const col = new THREE.Color(C[b.severity]);
+      const x = this.x(b.slot), z = this.z(r);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.32, 9, 16, 1, true),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.set(x, 4.5 + WORK_H * 0.2, z);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      halo.position.set(x, WORK_H + 0.4, z); halo.scale.set(3.2, 3.2, 1);
+      const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.42), new THREE.MeshBasicMaterial({ color: col }));
+      cap.position.set(x, 9.6, z);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 40),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.05, z);
+      [beam, halo, cap, ring].forEach(o => this.beaconGroup.add(o));
+      this.beacons.push({ beam, halo, cap, ring, phase: k * 0.7, key: b.key, x, z });
+    });
+  };
+
+  P.select = function (iso) { this.selected = iso; };
+
+  P.focusOn = function (key) {
+    const b = this.beacons.find(x => x.key === key);
+    this.focus = b ? new THREE.Vector3(b.x, 1, b.z) : new THREE.Vector3(0, 0, 0);
+    this.focusUntil = performance.now() + 1400;
+    if (b) this.controls.autoRotate = false;
+    return !!b;
+  };
+
+  P.setSpin = function (on) { if (!this.dead) this.controls.autoRotate = on && !reduce; };
+
+  P.frame = function () {
+    const t = this.clock.getElapsedTime();
+    if (this.animating) {
+      const e = (performance.now() - this.t0) / 1000;
+      let done = true;
+      for (let i = 0; i < this.rows * SPD; i++) {
+        const r = Math.floor(i / SPD), s = i % SPD;
+        let k = (e * 1.5) - r * 0.045 - s * 0.0025;
+        if (k < 1) done = false;
+        k = Math.max(0, Math.min(1, k));
+        const ease = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease-out with a slight overshoot
+        this.heights[i] = this.targets[i] * ease;
+      }
+      this.writeMatrices();
+      if (done) { this.animating = false; this.heights.set(this.targets); this.writeMatrices(); }
+    }
+    if (!reduce) {
+      this.beacons.forEach(b => {
+        const p = (t * 0.8 + b.phase) % 1;
+        b.ring.scale.setScalar(1 + p * 3.2); b.ring.material.opacity = 0.85 * (1 - p);
+        const pulse = 0.75 + 0.25 * Math.sin(t * 3 + b.phase);
+        b.halo.scale.setScalar(3.2 * pulse); b.beam.material.opacity = 0.35 + 0.2 * pulse;
+        b.cap.rotation.y = t * 1.6; b.cap.position.y = 9.6 + Math.sin(t * 2 + b.phase) * 0.25;
+      });
+      this.dust.rotation.y = t * 0.01;
+      this.dust.position.y = Math.sin(t * 0.3) * 0.4;
+    }
+    if (this.focus && performance.now() < this.focusUntil) this.controls.target.lerp(this.focus, 0.08);
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  };
+
+  P.bindPointer = function () {
+    const dom = this.renderer.domElement;
+    let down = null;
+    const hit = ev => {
+      const rect = dom.getBoundingClientRect();
+      this.mouse.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+      this.ray.setFromCamera(this.mouse, this.camera);
+      const h = this.ray.intersectObject(this.mesh)[0];
+      if (!h || h.instanceId === undefined) return null;
+      const r = Math.floor(h.instanceId / SPD), s = h.instanceId % SPD;
+      const d = this.days[r]; if (!d) return null;
+      return { d, s, x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+    };
+    dom.addEventListener('pointerdown', ev => { down = [ev.clientX, ev.clientY]; });
+    dom.addEventListener('pointermove', ev => {
+      if (ev.buttons) { this.tip.hidden = true; return; }
+      const h = hit(ev);
+      if (!h) { this.tip.hidden = true; dom.style.cursor = ''; return; }
+      const v = h.d.str ? h.d.str[h.s] : null;
+      const hh = String(Math.floor(h.s / 4)).padStart(2, '0') + ':' + String((h.s % 4) * 15).padStart(2, '0');
+      this.tip.textContent = `${h.d.label} · ${hh} · ${v === '1' ? 'Work' : v === '0' ? 'Rest' : 'No record'}`;
+      this.tip.style.left = h.x + 'px'; this.tip.style.top = h.y + 'px'; this.tip.hidden = false;
+      dom.style.cursor = 'pointer';
+    });
+    dom.addEventListener('pointerleave', () => { this.tip.hidden = true; });
+    dom.addEventListener('pointerup', ev => {
+      if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 5) return;
+      const h = hit(ev); if (h) this.onPick(h.d.iso);
+    });
+  };
+
+  root.Stage = Stage;
+})(window);
+
+</script>
+<script>
+/* LogChecker 3D — application layer */
+(function () {
+  'use strict';
+  const F = window.Fatigue;
+  const SPD = F.SPD;
+  const STORE = 'logchecker3d.v1';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const SEV_W = { minor: 3, substantial: 6, severe: 12, critical: 20 };
+  const SEV_ORDER = ['critical', 'severe', 'substantial', 'minor'];
+
+  const dt = iso => new Date(iso + 'T00:00:00Z');
+  const fmtDay = iso => { const d = dt(iso); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
+  const fmtLong = iso => { const d = dt(iso); return `${DOW_LONG[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+  const slotTime = s => String(Math.floor(s / 4)).padStart(2, '0') + ':' + String((s % 4) * 15).padStart(2, '0');
+  const hm = min => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
+  const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+  // ---------------------------------------------------------------- state
+  const cache = new Map();
+  let stage = null;
+  let S = load();
+  if (!S) S = seed();
+
+  function load() {
+    try { const raw = localStorage.getItem(STORE); if (!raw) return null; const s = JSON.parse(raw); if (!s.drivers || !s.drivers.length) return null; return s; }
+    catch (e) { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify({ drivers: S.drivers, ncrs: S.ncrs, seq: S.seq, sel: S.sel, span: S.span })); } catch (e) { /* storage blocked: work in memory */ }
+  }
+  function seed() {
+    const s = { drivers: JSON.parse(JSON.stringify(window.SampleFleet.drivers)), ncrs: [], seq: 0, sel: 'd3', span: 14 };
+    S = s;
+    const pick = (id, sev) => evalFor(s.drivers.find(d => d.id === id)).breaches.find(b => b.severity === sev);
+    const b1 = pick('d3', 'critical'), b2 = pick('d4', 'substantial');
+    if (b1) addNcr(s.drivers[2], b1, { short: 'Driver stood down for required rest', long: 'Review rostering and scheduling', due: '2026-10-09', owner: 'Transport Manager', notes: 'Driver started 00:30 to make an early Brisbane pickup. Roster to be checked against customer window.', status: 'In progress', raised: '2026-09-21' });
+    if (b2) addNcr(s.drivers[3], b2, { short: 'Driver interviewed and counselled', long: '', due: '2026-10-02', owner: 'Compliance Officer', notes: '', status: 'Open', raised: '2026-09-28' });
+    cache.clear();
+    return s;
+  }
+
+  function driver() { return S.drivers.find(d => d.id === S.sel) || S.drivers[0]; }
+  function evalFor(d) {
+    if (!cache.has(d.id)) cache.set(d.id, F.evaluate(d.days, d.ruleset));
+    return cache.get(d.id);
+  }
+  function lastWorkDay(d) { const k = Object.keys(d.days).sort().reverse().find(x => d.days[x].includes('1')); return k || lastDay(d); }
+  function lastDay(d) { const k = Object.keys(d.days).sort(); return k.length ? k[k.length - 1] : todayIso(); }
+  function inRange(iso, end, n) { const k = F.isoDiff(iso, end); return k >= 0 && k < n; }
+  function breaches14(d) { const end = lastDay(d); return evalFor(d).breaches.filter(b => inRange(b.date, end, 14)); }
+  function score(list) { return Math.max(0, 100 - list.reduce((a, b) => a + SEV_W[b.severity], 0)); }
+  function ncrFor(key) { return S.ncrs.find(n => n.breachKey === key); }
+  function ncrOpen(n) { return n.status !== 'Closed'; }
+
+  const ui = { day: null, range: '14', ncrScope: 'driver', focusKey: null };
+  ui.day = lastWorkDay(driver());
+
+  // ---------------------------------------------------------------- roster
+  function ring(v) {
+    const r = 19, c = 2 * Math.PI * r, col = v >= 90 ? 'var(--ok)' : v >= 70 ? 'var(--minor)' : v >= 50 ? 'var(--substantial)' : 'var(--severe)';
+    return `<svg class="ring" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--line)" stroke-width="4"/>
+      <circle cx="23" cy="23" r="${r}" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 23 23)"/>
+      <text x="23" y="28" text-anchor="middle">${v}</text></svg>`;
+  }
+  function renderRoster() {
+    $('drivers').innerHTML = S.drivers.map(d => {
+      const list = breaches14(d), sc = score(list);
+      const counts = SEV_ORDER.filter(s => list.some(b => b.severity === s)).map(s => `<span class="dot" style="background:var(--${s})" title="${list.filter(b => b.severity === s).length} ${s}"></span>`).join('');
+      return `<button class="driver" aria-pressed="${d.id === S.sel}" data-id="${esc(d.id)}">
+        ${ring(sc)}
+        <span style="min-width:0"><span class="nm" style="display:block">${esc(d.name)}</span>
+        <span class="meta" style="display:block">${d.ruleset === 'bfm' ? 'BFM' : 'Standard Hours'} · ${esc(d.rego || 'No rego')}</span></span>
+        <span class="flags"><span class="mono" style="font-size:12px">${list.length ? list.length + ' breach' + (list.length > 1 ? 'es' : '') : 'Clear'}</span><span style="display:flex;gap:3px">${counts}</span></span>
+      </button>`;
+    }).join('');
+  }
+  $('drivers').addEventListener('click', e => {
+    const b = e.target.closest('.driver'); if (!b) return;
+    S.sel = b.dataset.id; ui.day = lastWorkDay(driver()); ui.focusKey = null; save(); renderAll(true);
+  });
+
+  // ---------------------------------------------------------------- stage
+  function windowEnd() {
+    const d = driver(); let end = lastDay(d);
+    if (ui.day > end) end = ui.day;
+    if (F.isoDiff(ui.day, end) >= S.span) end = F.isoAdd(ui.day, S.span - 1);
+    return end;
+  }
+  function windowDays() {
+    const d = driver(), end = windowEnd(), out = [];
+    for (let k = S.span - 1; k >= 0; k--) { const iso = F.isoAdd(end, -k); out.push({ iso, label: fmtDay(iso), str: d.days[iso] || null }); }
+    return out;
+  }
+  function renderStage(animate) {
+    const d = driver(), rs = F.RULESETS[d.ruleset];
+    $('hudName').textContent = d.name;
+    $('hudSub').textContent = `${rs.name} · ${rs.sub} · ${d.licence || 'Licence not recorded'} · ${d.base || ''}`.replace(/ · $/, '');
+    if (!stage) return;
+    const days = windowDays();
+    const list = evalFor(d).breaches.map(b => ({ iso: b.date, slot: b.slot, severity: b.severity, key: b.key }));
+    stage.select(ui.day);
+    stage.setData(days, list, ui.day, animate);
+  }
+  $('span7').onclick = () => setSpan(7);
+  $('span14').onclick = () => setSpan(14);
+  function setSpan(n) { S.span = n; $('span7').setAttribute('aria-pressed', n === 7); $('span14').setAttribute('aria-pressed', n === 14); save(); renderStage(true); renderWeek(); }
+  $('spinBtn').onclick = e => { const on = e.currentTarget.getAttribute('aria-pressed') !== 'true'; e.currentTarget.setAttribute('aria-pressed', on); stage && stage.setSpin(on); };
+
+  // ---------------------------------------------------------------- KPIs
+  function renderKpis() {
+    const d = driver(), list = breaches14(d), sc = score(list);
+    const t = F.totals(d.days, lastDay(d));
+    const open = S.ncrs.filter(n => n.driverId === d.id && ncrOpen(n)).length;
+    const sevC = list.filter(b => b.severity === 'severe' || b.severity === 'critical').length;
+    $('kpis').innerHTML = [
+      [sc + '<span style="font-size:16px;color:var(--muted)">/100</span>', 'Compliance score, 14 days', sc >= 90 ? 'var(--ok)' : sc >= 70 ? 'var(--minor)' : 'var(--severe)'],
+      [list.length, 'Breaches in 14 days', ''],
+      [sevC, 'Severe or critical', sevC ? 'var(--critical)' : ''],
+      [(t[7].work / 60).toFixed(1) + '<span style="font-size:16px;color:var(--muted)">h</span>', 'Work in last 7 days', ''],
+      [open, 'NCRs open', open ? 'var(--accent)' : '']
+    ].map(([v, l, c]) => `<div class="kpi"><div class="v" style="${c ? 'color:' + c : ''}">${v}</div><div class="l">${l}</div></div>`).join('');
+  }
+
+  // ---------------------------------------------------------------- diary
+  function buildDiaryChrome() {
+    const ax = $('axis'); let h = '';
+    for (let i = 0; i <= 24; i++) {
+      const l = i === 0 || i === 24 ? 'Midnight' : i === 12 ? 'Noon' : String(i % 12);
+      h += `<span style="left:${i / 24 * 100}%">${l}</span><i style="left:${i / 24 * 100}%;height:10px"></i>`;
+      if (i < 24) h += `<i style="left:${(i + .5) / 24 * 100}%;height:6px"></i><i style="left:${(i + .25) / 24 * 100}%;height:3px"></i><i style="left:${(i + .75) / 24 * 100}%;height:3px"></i>`;
+    }
+    ax.innerHTML = h;
+    ['laneWork', 'laneRest'].forEach(id => {
+      let c = '';
+      for (let s = 0; s < SPD; s++) c += `<div class="c${s < 32 || s >= 88 ? ' nt' : ''}" data-s="${s}" title="${slotTime(s)}"></div>`;
+      $(id).innerHTML = c;
+    });
+  }
+
+  function paintCells(str) {
+    const w = $('laneWork').children, r = $('laneRest').children;
+    let work = 0;
+    for (let s = 0; s < SPD; s++) {
+      const v = str ? str[s] : null;
+      w[s].classList.toggle('on', v === '1'); r[s].classList.toggle('on', v === '0');
+      if (v === '1') work++;
+    }
+    $('totWork').textContent = hm(work * 15);
+    $('totRest').textContent = str ? hm((SPD - work) * 15) : '—';
+    $('totWork').style.color = work > 48 ? 'var(--severe)' : '';
+  }
+
+  function renderDiary() {
+    const d = driver(), str = d.days[ui.day];
+    $('dayPick').value = ui.day;
+    $('diaryTitle').textContent = fmtLong(ui.day);
+    const di = (d.diary && d.diary[ui.day]) || {};
+    $('diaryNo').value = di.no || ''; $('pageNo').value = di.page || '';
+    $('nodata').hidden = !!str;
+    paintCells(str);
+    // breach markers and window shading for this day
+    const ev = evalFor(d);
+    const today = ev.breaches.filter(b => b.date === ui.day);
+    $('marks').innerHTML = today.map(b => `<b style="left:${(b.slot + .5) / SPD * 100}%;border-top-color:var(--${b.severity});color:var(--${b.severity})" title="${esc(b.rule.label)} · ${b.severity}"></b>`).join('');
+    const sel = ui.focusKey && ev.breaches.find(b => b.key === ui.focusKey);
+    const w = $('laneWork').children, r = $('laneRest').children;
+    for (let s = 0; s < SPD; s++) { w[s].classList.remove('win'); r[s].classList.remove('win'); }
+    if (sel && ui.day >= sel.wsDate && ui.day <= sel.weDate) {
+      const a = ui.day === sel.wsDate ? sel.wsSlot : 0, z = ui.day === sel.weDate ? sel.weSlot : SPD - 1;
+      for (let s = a; s <= z; s++) { w[s].classList.add('win'); r[s].classList.add('win'); }
+    }
+  }
+
+  // painting
+  let paint = null;
+  function slotAt(lane, x) { const r = lane.getBoundingClientRect(); return Math.max(0, Math.min(SPD - 1, Math.floor((x - r.left) / r.width * SPD))); }
+  function startPaint(lane, val, ev) {
+    const d = driver();
+    const arr = (d.days[ui.day] || '0'.repeat(SPD)).split('');
+    const s = slotAt(lane, ev.clientX);
+    paint = { lane, val, arr, last: s };
+    arr[s] = val; paintCells(arr.join(''));
+    lane.setPointerCapture(ev.pointerId);
+  }
+  function movePaint(ev) {
+    if (!paint) return;
+    const s = slotAt(paint.lane, ev.clientX);
+    const [a, b] = s < paint.last ? [s, paint.last] : [paint.last, s];
+    for (let i = a; i <= b; i++) paint.arr[i] = paint.val;
+    paint.last = s; paintCells(paint.arr.join(''));
+  }
+  function endPaint() {
+    if (!paint) return;
+    const d = driver();
+    d.days[ui.day] = paint.arr.join('');
+    paint = null;
+    commit();
+  }
+  [['laneWork', '1'], ['laneRest', '0']].forEach(([id, v]) => {
+    const lane = $(id);
+    lane.addEventListener('pointerdown', ev => { ev.preventDefault(); startPaint(lane, v, ev); });
+    lane.addEventListener('pointermove', movePaint);
+    lane.addEventListener('pointerup', endPaint);
+    lane.addEventListener('pointercancel', endPaint);
+  });
+
+  function commit() {
+    cache.delete(driver().id);
+    save();
+    renderRoster(); renderStage(false); renderKpis(); renderDiary(); renderWeek(); renderTotals(); renderBreaches(); renderNcrs();
+  }
+
+  function setDay(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+    ui.day = iso; ui.focusKey = null;
+    renderStage(false); renderDiary(); renderWeek(); renderTotals(); renderBreaches();
+  }
+  $('prevDay').onclick = () => setDay(F.isoAdd(ui.day, -1));
+  $('nextDay').onclick = () => setDay(F.isoAdd(ui.day, 1));
+  $('dayPick').onchange = e => setDay(e.target.value);
+  $('copyPrev').onclick = () => {
+    const d = driver(), prev = d.days[F.isoAdd(ui.day, -1)];
+    if (!prev) { toast('The previous day has no record to copy'); return; }
+    d.days[ui.day] = prev; commit(); toast('Copied ' + fmtDay(F.isoAdd(ui.day, -1)));
+  };
+  $('clearDay').onclick = () => {
+    const d = driver(), old = d.days[ui.day]; if (!old) return;
+    const day = ui.day; delete d.days[day]; commit();
+    toast('Page cleared', 'Undo', () => { d.days[day] = old; commit(); });
+  };
+  ['diaryNo', 'pageNo'].forEach(id => $(id).addEventListener('change', () => {
+    const d = driver(); d.diary = d.diary || {};
+    d.diary[ui.day] = { no: $('diaryNo').value.trim(), page: $('pageNo').value.trim() }; save();
+  }));
+
+  // week / fortnight strips
+  function renderWeek() {
+    const d = driver(), days = windowDays().slice().reverse(), ev = evalFor(d);
+    $('week').innerHTML = days.map(x => {
+      let work = 0; if (x.str) for (const c of x.str) if (c === '1') work++;
+      const marks = ev.breaches.filter(b => b.date === x.iso).map(b => `<span class="bm" style="left:${(b.slot + .5) / SPD * 100}%;background:var(--${b.severity})"></span>`).join('');
+      return `<div class="wrow" data-iso="${x.iso}" aria-current="${x.iso === ui.day}" role="button" tabindex="0">
+        <span class="d">${fmtDay(x.iso)}</span>
+        <div class="wstrip"><canvas width="96" height="1" data-str="${x.str || ''}"></canvas>${marks}</div>
+        <span class="t">${x.str ? hm(work * 15) : '—'}</span></div>`;
+    }).join('');
+    const css = getComputedStyle(document.documentElement);
+    const cw = css.getPropertyValue('--work').trim(), cr = css.getPropertyValue('--rest').trim(), cn = css.getPropertyValue('--line-soft').trim();
+    $('week').querySelectorAll('canvas').forEach(c => {
+      const g = c.getContext('2d'), s = c.dataset.str;
+      for (let i = 0; i < SPD; i++) { g.fillStyle = !s ? cn : s[i] === '1' ? cw : cr; g.fillRect(i, 0, 1, 1); }
+    });
+  }
+  $('week').addEventListener('click', e => { const r = e.target.closest('.wrow'); if (r) setDay(r.dataset.iso); });
+  $('week').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const r = e.target.closest('.wrow'); if (r) { e.preventDefault(); setDay(r.dataset.iso); } } });
+
+  // ---------------------------------------------------------------- totals
+  function renderTotals() {
+    const d = driver(), t = F.totals(d.days, ui.day), rs = F.RULESETS[d.ruleset];
+    const lim = { 1: rs.rules.find(r => r.len === 96).maxWork * 15, 7: d.ruleset === 'bfm' ? null : 72 * 60, 14: 144 * 60 };
+    $('totTitle').textContent = 'Totals to end of ' + fmtDay(ui.day);
+    $('totals').innerHTML = [1, 7, 14].map(n => {
+      const x = t[n], L = lim[n], pct = L ? Math.min(100, x.work / L * 100) : 0;
+      return `<div class="tot"><h4>${n === 1 ? '1 day' : n + ' days'}</h4>
+        <div class="row"><span>Work</span><b style="color:var(--work)">${hm(x.work)}</b></div>
+        <div class="row"><span>Rest</span><b style="color:var(--rest)">${hm(x.rest)}</b></div>
+        ${L ? `<div class="meter"><b class="${x.work > L ? 'over' : ''}" style="width:${pct}%"></b></div><div class="lim">${Math.round(x.work / L * 100)}% of the ${L / 60} h ${n === 1 ? '24-hour' : n + '-day'} limit</div>` : `<div class="meter"></div><div class="lim">No 7-day work cap under BFM</div>`}
+        <div class="lim">${x.days} of ${n} day${n > 1 ? 's' : ''} recorded</div></div>`;
+    }).join('');
+  }
+
+  // ---------------------------------------------------------------- breaches
+  function describe(b) {
+    if (b.kind === 'night') return { head: `${b.rule.label} · night rest`, body: `${b.value} night rest break${b.value === 1 ? '' : 's'} taken, ${b.limit} required${b.pair ? '' : ', none on consecutive nights'}`, amt: b.amount ? `${b.amount} short` : 'not consecutive' };
+    if (b.kind === 'rest') return { head: `${b.rule.label} · continuous rest`, body: `Longest stationary rest ${hm(b.value)}, needs ${hm(b.limit)}`, amt: `${hm(b.amount)} short` };
+    if (b.rule.cumulative) return { head: b.rule.label, body: `Worked ${hm(b.value)} without a 24-hour rest, limit ${hm(b.limit)}`, amt: `${hm(b.amount)} over` };
+    return { head: `${b.rule.label} · work time`, body: `Worked ${hm(b.value)} in ${b.rule.label}, limit ${hm(b.limit)}`, amt: `${hm(b.amount)} over` };
+  }
+  function filtered() {
+    const d = driver(), all = evalFor(d).breaches;
+    if (ui.range === 'all') return all;
+    return all.filter(b => inRange(b.date, ui.day, +ui.range));
+  }
+  function renderBreaches() {
+    const list = filtered().slice().reverse();
+    const scope = ui.range === 'all' ? 'in all records' : ui.range === '1' ? 'on ' + fmtDay(ui.day) : `in the ${ui.range} days to ${fmtDay(ui.day)}`;
+    $('brTitle').textContent = list.length ? `${list.length} breach${list.length > 1 ? 'es' : ''} ${scope}` : 'No breaches ' + scope;
+    if (!list.length) { $('blist').innerHTML = `<div class="empty"><b>Compliant</b>No work or rest breaches ${scope} under ${F.RULESETS[driver().ruleset].name}.</div>`; return; }
+    $('blist').innerHTML = list.map(b => {
+      const t = describe(b), n = ncrFor(b.key);
+      return `<div class="breach${b.key === ui.focusKey ? ' sel' : ''}" data-key="${esc(b.key)}">
+        <span class="stripe" style="background:var(--${b.severity})"></span>
+        <div style="min-width:0">
+          <div class="t1"><span class="pill sev-${b.severity}">${b.severity}</span><span class="rl">${esc(t.head)}</span><span class="mono c-${b.severity}" style="font-size:13px">${t.amt}</span></div>
+          <div class="t2">${esc(t.body)}</div>
+          <div class="t2 mono" style="font-size:12px">${b.kind === 'work' ? 'Limit passed' : 'Period ended'} ${fmtDay(b.date)} ${slotTime(b.slot)} · counted from ${fmtDay(b.wsDate)} ${slotTime(b.wsSlot)}</div>
+        </div>
+        <div class="acts">
+          <button class="btn sm" data-act="show">Show</button>
+          ${n ? `<span class="ncr-tag" title="${esc(n.status)}">${esc(n.id)} · ${esc(n.status)}</span>` : `<button class="btn sm primary" data-act="ncr">Raise NCR</button>`}
+        </div></div>`;
+    }).join('');
+  }
+  $('blist').addEventListener('click', e => {
+    const row = e.target.closest('.breach'); if (!row) return;
+    const b = evalFor(driver()).breaches.find(x => x.key === row.dataset.key); if (!b) return;
+    const act = e.target.closest('[data-act]');
+    if (act && act.dataset.act === 'ncr') { openNcr(b); return; }
+    ui.focusKey = b.key; ui.day = b.date;
+    renderStage(false); renderDiary(); renderWeek(); renderTotals(); renderBreaches();
+    if (stage) { stage.focusOn(b.key); $('spinBtn').setAttribute('aria-pressed', 'false'); }
+    $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  document.querySelectorAll('[data-range]').forEach(c => c.onclick = () => {
+    ui.range = c.dataset.range;
+    document.querySelectorAll('[data-range]').forEach(x => x.setAttribute('aria-pressed', x === c));
+    renderBreaches();
+  });
+
+  // ---------------------------------------------------------------- NCR
+  let pending = null;
+  function nextNcrId() { S.seq = (S.seq || 0) + 1; return 'NCR-' + String(S.seq).padStart(4, '0'); }
+  function addNcr(d, b, f) {
+    const t = describe(b);
+    const n = Object.assign({ id: nextNcrId(), driverId: d.id, driverName: d.name, breachKey: b.key, rule: `${t.head} — ${t.amt}`, severity: b.severity,
+      when: `${fmtDay(b.date)} ${b.date.slice(0, 4)} ${slotTime(b.slot)}`, raised: todayIso() }, f);
+    S.ncrs.push(n); return n;
+  }
+  function openNcr(b) {
+    pending = b;
+    const d = driver(), t = describe(b);
+    $('ncrNo').textContent = 'NCR-' + String((S.seq || 0) + 1).padStart(4, '0') + ' · ' + d.name;
+    $('ncrRef').innerHTML = `<span class="pill sev-${b.severity}">${b.severity}</span> <b>${esc(t.head)}</b> <span class="mono c-${b.severity}">${t.amt}</span><br><span class="hint">${esc(t.body)} · ${fmtLong(b.date)} ${slotTime(b.slot)}</span>`;
+    $('ncrShort').value = ''; $('ncrLong').value = ''; $('ncrNotes').value = ''; $('ncrErr').textContent = '';
+    $('ncrOwner').value = 'Transport Manager';
+    $('ncrDue').value = F.isoAdd(todayIso(), b.severity === 'critical' || b.severity === 'severe' ? 2 : 7);
+    $('ncrDlg').showModal();
+  }
+  $('ncrCancel').onclick = () => $('ncrDlg').close();
+  $('ncrForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const short = $('ncrShort').value, due = $('ncrDue').value, owner = $('ncrOwner').value.trim();
+    if (!short || !due || !owner) { $('ncrErr').textContent = 'Choose a short-term action, a due date and who it is assigned to.'; return; }
+    const n = addNcr(driver(), pending, { short, long: $('ncrLong').value, due, owner, notes: $('ncrNotes').value.trim(), status: 'Open' });
+    save(); $('ncrDlg').close(); renderRoster(); renderKpis(); renderBreaches(); renderNcrs();
+    toast(n.id + ' raised');
+  });
+  function renderNcrs() {
+    const all = ui.ncrScope === 'all';
+    const list = S.ncrs.filter(n => all || n.driverId === S.sel).slice().reverse();
+    const today = todayIso();
+    if (!list.length) { $('ncrTable').innerHTML = `<tbody><tr><td><div class="empty" style="border:0">No NCRs ${all ? 'for the fleet' : 'for ' + esc(driver().name)} yet. Use Raise NCR on a breach to open one.</div></td></tr></tbody>`; return; }
+    $('ncrTable').innerHTML = `<thead><tr><th>NCR</th>${all ? '<th>Driver</th>' : ''}<th>Breach</th><th>Short-term action</th><th>Long-term action</th><th>Assigned</th><th>Due</th><th>Status</th></tr></thead><tbody>` +
+      list.map(n => `<tr>
+        <td class="mono">${esc(n.id)}<div class="hint">Raised ${esc(n.raised)}</div></td>
+        ${all ? `<td>${esc(n.driverName)}</td>` : ''}
+        <td><span class="pill sev-${esc(n.severity)}">${esc(n.severity)}</span> ${esc(n.rule)}<div class="hint">${esc(n.when)}</div>${n.notes ? `<div class="hint">${esc(n.notes)}</div>` : ''}</td>
+        <td>${esc(n.short)}</td><td>${esc(n.long) || '<span class="hint">—</span>'}</td><td>${esc(n.owner)}</td>
+        <td class="num ${n.due < today && ncrOpen(n) ? 'overdue' : ''}">${esc(n.due)}${n.due < today && ncrOpen(n) ? '<div style="font-size:12px">Overdue</div>' : ''}</td>
+        <td><select class="status" data-ncr-id="${esc(n.id)}" aria-label="Status of ${esc(n.id)}">${['Open', 'In progress', 'Closed'].map(s => `<option${s === n.status ? ' selected' : ''}>${s}</option>`).join('')}</select></td>
+      </tr>`).join('') + '</tbody>';
+  }
+  document.addEventListener('change', e => {
+    const id = e.target.dataset && e.target.dataset.ncrId; if (!id) return;
+    const n = S.ncrs.find(x => x.id === id); if (!n) return;
+    n.status = e.target.value; save(); renderRoster(); renderKpis(); renderBreaches(); renderNcrs(); renderReport();
+    toast(`${n.id} set to ${n.status}`);
+  });
+  document.querySelectorAll('[data-ncr]').forEach(c => c.onclick = () => {
+    ui.ncrScope = c.dataset.ncr;
+    document.querySelectorAll('[data-ncr]').forEach(x => x.setAttribute('aria-pressed', x === c));
+    renderNcrs();
+  });
+
+  // ---------------------------------------------------------------- drivers
+  $('addDriverBtn').onclick = () => { $('drvForm').reset(); $('drvErr').textContent = ''; $('drvDlg').showModal(); };
+  $('drvCancel').onclick = () => $('drvDlg').close();
+  $('drvForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = $('drvName').value.trim();
+    if (!name) { $('drvErr').textContent = 'Enter the driver’s full name.'; return; }
+    const d = { id: 'u' + Date.now().toString(36), name, licence: $('drvLic').value.trim(), rego: $('drvRego').value.trim(), base: '', ruleset: $('drvRule').value, days: {}, diary: {} };
+    S.drivers.push(d); S.sel = d.id; ui.day = todayIso(); save(); $('drvDlg').close(); renderAll(true);
+    toast(name + ' added. Paint today’s diary page to start.');
+  });
+  $('resetBtn').onclick = () => {
+    const before = JSON.stringify({ drivers: S.drivers, ncrs: S.ncrs, seq: S.seq, sel: S.sel, span: S.span });
+    try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ }
+    S = seed(); ui.day = lastDay(driver()); save(); renderAll(true);
+    toast('Example data restored', 'Undo', () => { S = JSON.parse(before); cache.clear(); ui.day = lastDay(driver()); save(); renderAll(true); });
+  };
+
+  // ---------------------------------------------------------------- report
+  function renderReport() {
+    const rows = S.drivers.map(d => {
+      const list = breaches14(d), end = lastDay(d), t = F.totals(d.days, end);
+      const c = {}; F.SEVERITY.forEach(s => c[s] = list.filter(b => b.severity === s).length);
+      const noNcr = list.filter(b => !ncrFor(b.key) && (b.severity === 'severe' || b.severity === 'critical')).length;
+      return { d, list, end, c, sc: score(list), work: t[14].work, noNcr };
+    });
+    const ends = rows.map(r => r.end).sort();
+    $('repPeriod').textContent = `14 days to ${fmtLong(ends[ends.length - 1])} · prepared ${fmtLong(todayIso())}`;
+    const tot = rows.reduce((a, r) => a + r.list.length, 0);
+    const sc = rows.reduce((a, r) => a + r.c.severe + r.c.critical, 0);
+    const avg = Math.round(rows.reduce((a, r) => a + r.sc, 0) / Math.max(1, rows.length));
+    const open = S.ncrs.filter(ncrOpen).length;
+    const overdue = S.ncrs.filter(n => ncrOpen(n) && n.due < todayIso()).length;
+    $('repKpis').innerHTML = [
+      [avg + '<span style="font-size:16px;color:var(--muted)">/100</span>', 'Fleet compliance score', avg >= 90 ? 'var(--ok)' : avg >= 70 ? 'var(--minor)' : 'var(--severe)'],
+      [rows.length, 'Drivers audited', ''],
+      [tot, 'Breaches in 14 days', ''],
+      [sc, 'Severe or critical', sc ? 'var(--critical)' : ''],
+      [open + (overdue ? ` <span style="font-size:16px;color:var(--severe)">${overdue} overdue</span>` : ''), 'NCRs open', open ? 'var(--accent)' : '']
+    ].map(([v, l, c]) => `<div class="kpi"><div class="v" style="${c ? 'color:' + c : ''}">${v}</div><div class="l">${l}</div></div>`).join('');
+    $('repTable').innerHTML = `<thead><tr><th>Driver</th><th>Rule set</th><th class="num">Work 14 d</th><th class="num">Minor</th><th class="num">Substantial</th><th class="num">Severe</th><th class="num">Critical</th><th>Mix</th><th class="num">Score</th><th>Action needed</th></tr></thead><tbody>` +
+      rows.map(r => {
+        const n = r.list.length || 1;
+        const bar = r.list.length ? F.SEVERITY.map(s => `<i style="width:${r.c[s] / n * 100}%;background:var(--${s})"></i>`).join('') : '<i style="width:100%;background:var(--ok);opacity:.5"></i>';
+        return `<tr><td><button class="btn sm ghost" data-goto="${esc(r.d.id)}">${esc(r.d.name)}</button></td><td>${r.d.ruleset === 'bfm' ? 'BFM' : 'Standard'}</td>
+          <td class="num">${hm(r.work)}</td>${F.SEVERITY.map(s => `<td class="num ${r.c[s] ? 'c-' + s : ''}">${r.c[s]}</td>`).join('')}
+          <td><div class="sevbar">${bar}</div></td><td class="num"><b>${r.sc}</b></td>
+          <td>${r.noNcr ? `<span class="overdue">${r.noNcr} severe or critical without NCR</span>` : r.list.some(b => b.severity === 'severe' || b.severity === 'critical') ? '<span class="hint">NCRs in place for severe and critical breaches</span>' : r.list.length ? '<span class="hint">Minor or substantial only. Review with driver</span>' : '<span style="color:var(--ok)">Compliant</span>'}</td></tr>`;
+      }).join('') + '</tbody>';
+    const today = todayIso();
+    $('repNcr').innerHTML = S.ncrs.length ? `<thead><tr><th>NCR</th><th>Driver</th><th>Breach</th><th>Action</th><th>Assigned</th><th>Due</th><th>Status</th></tr></thead><tbody>` +
+      S.ncrs.slice().reverse().map(n => `<tr><td class="mono">${esc(n.id)}</td><td>${esc(n.driverName)}</td><td><span class="pill sev-${esc(n.severity)}">${esc(n.severity)}</span> ${esc(n.rule)}<div class="hint">${esc(n.when)}</div></td>
+        <td>${esc(n.short)}${n.long ? `<div class="hint">${esc(n.long)}</div>` : ''}</td><td>${esc(n.owner)}</td>
+        <td class="num ${n.due < today && ncrOpen(n) ? 'overdue' : ''}">${esc(n.due)}</td><td>${esc(n.status)}</td></tr>`).join('') + '</tbody>'
+      : '<tbody><tr><td><div class="empty" style="border:0">No NCRs raised.</div></td></tr></tbody>';
+    S._rows = rows;
+  }
+  $('repTable').addEventListener('click', e => {
+    const b = e.target.closest('[data-goto]'); if (!b) return;
+    S.sel = b.dataset.goto; ui.day = lastDay(driver()); ui.focusKey = null; save(); location.hash = 'audit'; showView('audit'); renderAll(true);
+  });
+  $('copyReport').onclick = () => {
+    const rows = S._rows || [];
+    const L = [];
+    L.push('APEX TRANSPORT AND DISTRIBUTION — FATIGUE COMPLIANCE REPORT');
+    L.push($('repPeriod').textContent); L.push('');
+    rows.forEach(r => {
+      L.push(`${r.d.name} (${r.d.ruleset === 'bfm' ? 'BFM' : 'Standard Hours'}) — score ${r.sc}/100, work ${hm(r.work)} in 14 days`);
+      if (!r.list.length) L.push('  No breaches.');
+      r.list.forEach(b => { const t = describe(b), n = ncrFor(b.key); L.push(`  [${b.severity.toUpperCase()}] ${fmtDay(b.date)} ${slotTime(b.slot)} ${t.head}: ${t.body} (${t.amt})${n ? ' — ' + n.id + ' ' + n.status : ' — no NCR'}`); });
+      L.push('');
+    });
+    L.push('NCR REGISTER');
+    S.ncrs.forEach(n => L.push(`  ${n.id} ${n.driverName} — ${n.rule}; action: ${n.short}${n.long ? ' / ' + n.long : ''}; ${n.owner}; due ${n.due}; ${n.status}`));
+    const text = L.join('\n');
+    const done = () => toast('Report copied to clipboard');
+    try {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text));
+    } catch (e) { fallbackCopy(text); }
+  };
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove(); toast(ok ? 'Report copied to clipboard' : 'Copy was blocked by the browser');
+  }
+
+  // ---------------------------------------------------------------- rule book
+  function renderRules() {
+    const band = (t, word) => `<span class="c-minor">≤ ${t[0]}m</span> · <span class="c-substantial">≤ ${t[1]}m</span> · <span class="c-severe">≤ ${t[2]}m</span> · <span class="c-critical">&gt; ${t[2]}m</span> ${word}`;
+    $('rulebook').innerHTML = Object.values(F.RULESETS).map(rs => `<section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">${esc(rs.sub)}</p><h2 class="h">${esc(rs.name)}</h2></div></div>
+      <div class="table-scroll"><table><thead><tr><th>In any period of</th><th>Maximum work</th><th>Minimum rest</th></tr></thead><tbody>
+      ${rs.rules.map(r => { const [a, b] = r.text.split(' · '); return `<tr><td><b>${esc(r.label)}</b></td><td>${esc(a.replace(/^Max /, ''))}</td><td>${esc((b || a).replace(/^[Mm]in /, ''))}</td></tr>`; }).join('')}
+      </tbody></table></div>
+      <p class="eyebrow" style="margin-top:16px">Breach risk categories · minor · substantial · severe · critical</p>
+      <div class="table-scroll"><table><tbody>
+      ${rs.rules.map(r => `<tr><td><b>${esc(r.label)}</b></td><td class="mono" style="font-size:12.5px">${band(r.cat, 'over')}${r.restCat ? '<br>' + band(r.restCat, 'short of rest') : ''}${r.nightMin ? '<br><span class="hint">Night rest: 1 short substantial, 2+ short severe, none critical</span>' : ''}</td></tr>`).join('')}
+      </tbody></table></div></section>`).join('');
+  }
+
+  // ---------------------------------------------------------------- shell
+  function toast(msg, label, fn) {
+    const t = $('toast');
+    t.innerHTML = esc(msg) + (label ? ` <button class="btn sm" style="margin-left:8px;pointer-events:auto" id="toastAct">${esc(label)}</button>` : '');
+    t.classList.add('on'); t.style.pointerEvents = label ? 'auto' : 'none';
+    if (label) $('toastAct').onclick = () => { t.classList.remove('on'); fn(); };
+    clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), label ? 6000 : 2400);
+  }
+  function showView(v) {
+    if (!['audit', 'report', 'rules'].includes(v)) v = 'audit';
+    document.querySelectorAll('.view').forEach(x => { x.hidden = x.id !== 'view-' + v; });
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.view === v));
+    if (v === 'report') renderReport();
+    if (v === 'audit' && stage) stage.resize();
+  }
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => { location.hash = t.dataset.view; showView(t.dataset.view); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+
+  function renderAll(animate) {
+    renderRoster(); renderStage(animate); renderKpis(); renderDiary(); renderWeek(); renderTotals(); renderBreaches(); renderNcrs(); renderReport();
+  }
+
+  buildDiaryChrome();
+  $('span7').setAttribute('aria-pressed', S.span === 7); $('span14').setAttribute('aria-pressed', S.span !== 7);
+  if (window.THREE && THREE.OrbitControls) stage = new window.Stage($('stage'), $('tip'), iso => setDay(iso));
+  else $('stage').innerHTML = '<div class="nogl">The 3D view could not load. The diary and breach tools below still work.</div>';
+  renderRules();
+  renderAll(true);
+  showView(location.hash.slice(1) || 'audit');
+  // re-draw labels once web fonts arrive so sprites use the right face
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderStage(false));
+})();
+
+</script>
+</body>
+</html>

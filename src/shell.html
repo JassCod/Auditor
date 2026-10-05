@@ -1,0 +1,252 @@
+<title>LogChecker 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/*@@STYLES@@*/
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#audit"><b>Log<span>Checker</span></b><small>3D · NHVR fatigue audit</small></a>
+    <span class="operator">Apex Transport and Distribution</span>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" id="tab-audit" data-view="audit" aria-selected="true">Driver audit</button>
+      <button class="tab" role="tab" id="tab-report" data-view="report" aria-selected="false">Compliance report</button>
+      <button class="tab" role="tab" id="tab-rules" data-view="rules" aria-selected="false">Rule book</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ================= AUDIT ================= -->
+  <section class="view" id="view-audit">
+    <div class="audit">
+      <aside class="roster">
+        <div class="roster-head">
+          <p class="eyebrow" style="margin:0">Drivers · last 14 days</p>
+          <button class="btn sm ghost" id="addDriverBtn">+ Add driver</button>
+        </div>
+        <div class="drivers" id="drivers"></div>
+        <p class="hint">Example fleet loaded. Records you edit are saved in this browser.</p>
+        <button class="btn sm ghost danger" id="resetBtn" style="align-self:flex-start">Reset example data</button>
+      </aside>
+
+      <div style="min-width:0">
+        <div class="stage-card">
+          <div class="stage" id="stage"></div>
+          <div class="stage-hud">
+            <div class="hud-row">
+              <div class="hud-title">
+                <div class="who" id="hudName">—</div>
+                <div class="sub" id="hudSub"></div>
+              </div>
+              <div class="hud-ctrl">
+                <div class="seg" role="group" aria-label="Days shown">
+                  <button id="span7" aria-pressed="false">7 days</button>
+                  <button id="span14" aria-pressed="true">14 days</button>
+                </div>
+                <div class="seg"><button id="spinBtn" aria-pressed="true">Orbit</button></div>
+              </div>
+            </div>
+            <div class="hud-row" style="align-items:flex-end">
+              <div class="legend">
+                <span><i style="background:var(--work)"></i>Work</span>
+                <span><i style="background:var(--rest)"></i>Rest</span>
+                <span><i style="background:var(--night)"></i>Night window 10pm–8am</span>
+                <span><i style="background:var(--critical)"></i>Breach beacon</span>
+              </div>
+              <span class="hint hud-hint" style="background:rgba(7,12,20,.66);padding:4px 8px;border-radius:6px">Drag to orbit · scroll to zoom · click a day</span>
+            </div>
+          </div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <!-- diary page -->
+        <section class="panel" aria-labelledby="diaryTitle">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Work diary page</p>
+              <div class="daybar">
+                <div class="daynav">
+                  <button id="prevDay" aria-label="Previous day">‹</button>
+                  <input type="date" id="dayPick" aria-label="Diary date">
+                  <button id="nextDay" aria-label="Next day">›</button>
+                </div>
+                <h2 class="dayname" id="diaryTitle">—</h2>
+              </div>
+            </div>
+            <div class="daybar">
+              <div class="field-inline"><label for="diaryNo">Diary no.</label><input id="diaryNo" placeholder="WD 000 000"></div>
+              <div class="field-inline"><label for="pageNo">Page</label><input id="pageNo" style="width:70px" placeholder="—"></div>
+            </div>
+          </div>
+
+          <div class="diary-scroll">
+            <div class="diary" id="diary">
+              <div></div><div class="axis" id="axis"></div><div></div>
+              <div></div><div class="marks" id="marks"></div><div></div>
+              <div class="lane-label">WORK</div><div class="lane work" id="laneWork"></div><div class="lane-total w" id="totWork">0h 00m</div>
+              <div class="lane-label">REST</div><div class="lane rest" id="laneRest"></div><div class="lane-total r" id="totRest">24h 00m</div>
+            </div>
+            <div class="week" id="week"></div>
+          </div>
+          <div class="daybar" style="margin-top:12px">
+            <span class="hint">Click or drag in the WORK lane to record work, in the REST lane to record rest. Each cell is 15 minutes.</span>
+            <span class="spacer"></span>
+            <button class="btn sm" id="copyPrev">Copy previous day</button>
+            <button class="btn sm ghost danger" id="clearDay">Clear this page</button>
+          </div>
+          <p class="nodata" id="nodata" hidden>No record for this day yet. Paint the lanes to start one.</p>
+        </section>
+
+        <div class="cols">
+          <section class="panel" aria-labelledby="totTitle">
+            <div class="panel-head"><div><p class="eyebrow">Totals at end of day</p><h2 class="h" id="totTitle">Work and rest</h2></div></div>
+            <div class="totals" id="totals"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="brTitle">
+            <div class="panel-head">
+              <div><p class="eyebrow">Breach information</p><h2 class="h" id="brTitle">Breaches</h2></div>
+              <div class="filters" role="group" aria-label="Breach range">
+                <button class="chip" data-range="1" aria-pressed="false">This day</button>
+                <button class="chip" data-range="7" aria-pressed="false">7 days</button>
+                <button class="chip" data-range="14" aria-pressed="true">14 days</button>
+                <button class="chip" data-range="all" aria-pressed="false">All records</button>
+              </div>
+            </div>
+            <div class="blist" id="blist"></div>
+          </section>
+        </div>
+
+        <section class="panel" aria-labelledby="ncrTitle">
+          <div class="panel-head">
+            <div><p class="eyebrow">Non-conformance reports</p><h2 class="h" id="ncrTitle">NCR register</h2></div>
+            <div class="filters" role="group" aria-label="NCR scope">
+              <button class="chip" data-ncr="driver" aria-pressed="true">This driver</button>
+              <button class="chip" data-ncr="all" aria-pressed="false">Whole fleet</button>
+            </div>
+          </div>
+          <div class="table-scroll"><table id="ncrTable"></table></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REPORT ================= -->
+  <section class="view" id="view-report" hidden>
+    <div class="report-head">
+      <div>
+        <p class="eyebrow" id="repPeriod">Reporting period</p>
+        <h1>Fleet fatigue compliance</h1>
+        <p>Breaches found in the 14 days to the latest record for each driver, counted against the rule set each driver works under, with the NCR raised for each.</p>
+      </div>
+      <button class="btn primary" id="copyReport">Copy report text</button>
+    </div>
+    <div class="kpis" id="repKpis"></div>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">By driver</p><h2 class="h">Breach summary</h2></div></div>
+      <div class="table-scroll"><table id="repTable"></table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Corrective action</p><h2 class="h">NCR status</h2></div></div>
+      <div class="table-scroll"><table id="repNcr"></table></div>
+    </section>
+  </section>
+
+  <!-- ================= RULES ================= -->
+  <section class="view" id="view-rules" hidden>
+    <div class="report-head" style="margin-bottom:16px">
+      <div>
+        <p class="eyebrow">Heavy Vehicle National Law · Fatigue Management National Regulation</p>
+        <h1>Rule book</h1>
+        <p>The limits LogChecker audits against, and how it counts time.</p>
+      </div>
+    </div>
+    <div class="rb" id="rulebook"></div>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Method</p><h2 class="h">How time is counted</h2></div></div>
+      <div class="prose">
+        <p>Work and rest are recorded in <b>15-minute blocks</b>, the same unit as the national work diary.</p>
+        <p>Periods shorter than 24 hours are counted forward from the <b>end of every rest break</b>. Periods of 24 hours or more are counted forward from the end of a <b>relevant major rest break</b> of 7 continuous hours, and from the first record.</p>
+        <p>A <b>night rest break</b> is 7 continuous hours of stationary rest between 10pm and 8am, or a 24-hour continuous rest break.</p>
+        <p>When overlapping periods report the same event, LogChecker keeps one breach per event, at the time the limit was first passed and at the largest amount over.</p>
+        <p>Days with no record count as rest. Breach risk categories follow the HVNL minor, substantial, severe and critical bands. The night rest categories are LogChecker's own banding.</p>
+      </div>
+    </section>
+    <p class="foot">LogChecker is an audit aid. Confirm every finding against the driver's work diary and the current Heavy Vehicle National Law and Heavy Vehicle (Fatigue Management) National Regulation before taking action. Advanced Fatigue Management (AFM) accreditations have operator-specific limits and are not audited here.</p>
+  </section>
+</main>
+
+<dialog id="ncrDlg">
+  <form class="dlg" id="ncrForm" method="dialog">
+    <div><p class="eyebrow" id="ncrNo">NCR</p><h3>Raise non-conformance</h3></div>
+    <div class="ref" id="ncrRef"></div>
+    <div class="grid2">
+      <div class="f"><label for="ncrShort">Short-term action *</label>
+        <select id="ncrShort" required>
+          <option value="">Select…</option>
+          <option>Driver interviewed and counselled</option>
+          <option>Driver stood down for required rest</option>
+          <option>Written warning issued</option>
+          <option>Work diary completion retraining</option>
+          <option>Next shift rescheduled</option>
+        </select></div>
+      <div class="f"><label for="ncrLong">Long-term action</label>
+        <select id="ncrLong">
+          <option value="">Select…</option>
+          <option>Fatigue management refresher training</option>
+          <option>Review rostering and scheduling</option>
+          <option>Review customer delivery windows</option>
+          <option>Move driver to electronic work diary</option>
+          <option>Disciplinary process under company policy</option>
+        </select></div>
+      <div class="f"><label for="ncrDue">Due date *</label><input type="date" id="ncrDue" required></div>
+      <div class="f"><label for="ncrOwner">Assigned to *</label><input id="ncrOwner" placeholder="e.g. Transport Manager" required></div>
+    </div>
+    <div class="f"><label for="ncrNotes">Notes</label><textarea id="ncrNotes" placeholder="What the driver said, root cause, evidence sighted"></textarea></div>
+    <div class="err" id="ncrErr"></div>
+    <div class="dlg-acts">
+      <button type="button" class="btn ghost" id="ncrCancel">Cancel</button>
+      <button type="submit" class="btn primary">Raise NCR</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="drvDlg">
+  <form class="dlg" id="drvForm" method="dialog">
+    <h3>Add driver</h3>
+    <div class="grid2">
+      <div class="f"><label for="drvName">Full name *</label><input id="drvName" required></div>
+      <div class="f"><label for="drvLic">Licence no.</label><input id="drvLic"></div>
+      <div class="f"><label for="drvRego">Vehicle rego</label><input id="drvRego"></div>
+      <div class="f"><label for="drvRule">Rule set</label>
+        <select id="drvRule"><option value="standard">Standard Hours · solo</option><option value="bfm">BFM · solo</option></select></div>
+    </div>
+    <div class="err" id="drvErr"></div>
+    <div class="dlg-acts">
+      <button type="button" class="btn ghost" id="drvCancel">Cancel</button>
+      <button type="submit" class="btn primary">Add driver</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/*@@ENGINE@@*/
+</script>
+<script>
+/*@@SAMPLE@@*/
+</script>
+<script>
+/*@@STAGE@@*/
+</script>
+<script>
+/*@@APP@@*/
+</script>
